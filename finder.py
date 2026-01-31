@@ -3,6 +3,7 @@ import sys
 import requests
 import time
 import urllib3
+import concurrent.futures
 
 subs = [
     ("sub1", "https://raw.githubusercontent.com/Ai123999/1Mond/refs/heads/main/1Mond_Notorgamers"),
@@ -12,7 +13,12 @@ subs = [
     ("sub6", "https://raw.githubusercontent.com/Ai123999/6Satu/refs/heads/main/6Satu_Notorgamers"),
     ("sub7", "https://raw.githubusercontent.com/Ai123999/7Sand/refs/heads/main/7Sand_Notorgamers"),
     ("whitelist", "https://raw.githubusercontent.com/Ai123999/WhiteeListSub/refs/heads/main/whitelistkeys"),
-    ("whitekey", "https://raw.githubusercontent.com/Ai123999/WhiteKeys/refs/heads/main/WhiteKeys")
+    ("whitekey", "https://raw.githubusercontent.com/Ai123999/WhiteKeys/refs/heads/main/WhiteKeys"),
+    ("vmess", "https://raw.githubusercontent.com/barry-far/V2ray-config/main/Splitted-By-Protocol/vmess.txt"),
+    ("vless", "https://raw.githubusercontent.com/barry-far/V2ray-config/main/Splitted-By-Protocol/vless.txt"),
+    ("trojan", "https://raw.githubusercontent.com/barry-far/V2ray-config/main/Splitted-By-Protocol/trojan.txt"),
+    ("ss", "https://raw.githubusercontent.com/barry-far/V2ray-config/main/Splitted-By-Protocol/ss.txt"),
+    ("ssr", "https://raw.githubusercontent.com/barry-far/V2ray-config/main/Splitted-By-Protocol/ssr.txt")
 ]
 
 def clear():
@@ -37,27 +43,31 @@ def banner():
     print(red("╚══════════════════════════════════════╝"))
     print()
 
-def ask_overwrite(filename):
-    if os.path.exists(filename) and os.path.getsize(filename) > 0:
-        print(yellow(f"  File {filename} already has configs."))
-        while True:
-            choice = input("  Do you want to overwrite it? (Y/N): ").strip().upper()
-            if choice == 'Y':
-                return True
-            elif choice == 'N':
-                return False
-            else:
-                print(red("  Please enter Y or N."))
-    return True
+def ask_clear_all():
+    print(yellow("[*] For updating configs, do you want to delete ALL config files?"))
+    print(yellow("    This will DELETE all .txt files and create new ones."))
+    while True:
+        choice = input("    Delete all config files? (Y/N): ").strip().upper()
+        if choice == 'Y':
+            return True
+        elif choice == 'N':
+            return False
+        else:
+            print(red("    Please enter Y or N."))
 
-def create_files():
-    for name, _ in subs:
-        filename = f"{name}.txt"
-        if not os.path.exists(filename):
-            with open(filename, 'w') as f:
-                f.write("")
+def delete_all_txt_files():
+    txt_files = [f for f in os.listdir('.') if f.endswith('.txt')]
+    deleted_count = 0
+    for file in txt_files:
+        try:
+            os.remove(file)
+            deleted_count += 1
+        except:
+            pass
+    return deleted_count
 
-def download_sub(name, url):
+def download_single_sub(args):
+    name, url = args
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'text/plain, */*',
@@ -71,7 +81,7 @@ def download_sub(name, url):
         try:
             session = requests.Session()
             session.verify = False
-            response = session.get(url, headers=headers, timeout=30)
+            response = session.get(url, headers=headers, timeout=15)
 
             if response.status_code == 200:
                 content = response.text
@@ -87,71 +97,120 @@ def download_sub(name, url):
                         filename = f"{name}.txt"
                         with open(filename, 'w') as f:
                             f.write('\n'.join(configs))
-                        return True, len(configs)
+                        return name, True, len(configs)
                     else:
-                        return False, 0
+                        filename = f"{name}.txt"
+                        with open(filename, 'w') as f:
+                            f.write('')
+                        return name, False, 0
                 else:
-                    return False, 0
+                    filename = f"{name}.txt"
+                    with open(filename, 'w') as f:
+                        f.write('')
+                    return name, False, 0
             elif attempt < 3:
-                wait_time = attempt * 3
-                time.sleep(wait_time)
+                time.sleep(1)
                 continue
             else:
-                return False, 0
+                filename = f"{name}.txt"
+                with open(filename, 'w') as f:
+                    f.write('')
+                return name, False, 0
 
         except requests.exceptions.Timeout:
             if attempt < 3:
-                time.sleep(10)
+                time.sleep(2)
                 continue
-            return False, 0
+            filename = f"{name}.txt"
+            with open(filename, 'w') as f:
+                f.write('')
+            return name, False, 0
         except requests.exceptions.ConnectionError:
             if attempt < 3:
-                time.sleep(5)
+                time.sleep(2)
                 continue
-            return False, 0
+            filename = f"{name}.txt"
+            with open(filename, 'w') as f:
+                f.write('')
+            return name, False, 0
         except Exception:
             if attempt < 3:
-                time.sleep(5)
+                time.sleep(2)
                 continue
-            return False, 0
+            filename = f"{name}.txt"
+            with open(filename, 'w') as f:
+                f.write('')
+            return name, False, 0
 
-    return False, 0
+    filename = f"{name}.txt"
+    with open(filename, 'w') as f:
+        f.write('')
+    return name, False, 0
 
-def retry_failed():
-    failed = []
-    for name, url in subs:
-        filename = f"{name}.txt"
-        if os.path.exists(filename) and os.path.getsize(filename) == 0:
-            failed.append((name, url))
+def download_parallel():
+    print(yellow("[*] Downloading configs in parallel..."))
+    
+    download_args = [(name, url) for name, url in subs]
+    results = {}
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_name = {executor.submit(download_single_sub, args): args[0] for args in download_args}
+        
+        for i, future in enumerate(concurrent.futures.as_completed(future_to_name), 1):
+            name = future_to_name[future]
+            try:
+                result_name, success, count = future.result()
+                results[result_name] = (success, count)
+                
+                if success:
+                    if count > 0:
+                        print(f"[{i}/{len(subs)}] {name}: {green(f'✓ {count} configs')}")
+                    else:
+                        print(f"[{i}/{len(subs)}] {name}: {yellow('⚠ Empty')}")
+                else:
+                    print(f"[{i}/{len(subs)}] {name}: {red('✗ Failed')}")
+                    
+            except Exception:
+                results[name] = (False, 0)
+                print(f"[{i}/{len(subs)}] {name}: {red('✗ Error')}")
+    
+    return results
 
-    if not failed:
+def retry_failed_parallel(failed_subs):
+    if not failed_subs:
         return 0, 0
 
     print()
-    print(yellow("[*] Retrying failed downloads..."))
+    print(yellow("[*] Retrying failed downloads in parallel..."))
     print()
 
+    download_args = [(name, url) for name, url in failed_subs]
     success_count = 0
     fail_count = 0
-
-    for i, (name, url) in enumerate(failed, 1):
-        print(f"[{i}/{len(failed)}] Retrying {name}...", end=' ', flush=True)
-
-        success, count = download_sub(name, url)
-
-        if success:
-            if count > 0:
-                print(green(f"✓ {count} configs"))
-                success_count += 1
-            else:
-                print(red("✗ Still empty"))
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_name = {executor.submit(download_single_sub, args): args[0] for args in download_args}
+        
+        for i, future in enumerate(concurrent.futures.as_completed(future_to_name), 1):
+            name = future_to_name[future]
+            try:
+                result_name, success, count = future.result()
+                
+                if success:
+                    if count > 0:
+                        print(f"[{i}/{len(failed_subs)}] {name}: {green(f'✓ {count} configs')}")
+                        success_count += 1
+                    else:
+                        print(f"[{i}/{len(failed_subs)}] {name}: {red('✗ Still empty')}")
+                        fail_count += 1
+                else:
+                    print(f"[{i}/{len(failed_subs)}] {name}: {red('✗ Failed again')}")
+                    fail_count += 1
+                    
+            except Exception:
+                print(f"[{i}/{len(failed_subs)}] {name}: {red('✗ Error')}")
                 fail_count += 1
-        else:
-            print(red("✗ Connection failed"))
-            fail_count += 1
-
-        time.sleep(2)
-
+    
     return success_count, fail_count
 
 def main():
@@ -162,56 +221,47 @@ def main():
 
     os.chdir('configs')
 
-    print(yellow("[*] Checking existing files..."))
-    create_files()
-    print(green("✓ All files checked successfully"))
+    clear_all = ask_clear_all()
+    if not clear_all:
+        print()
+        print(yellow("[!] Config update cancelled."))
+        print(yellow("[!] Program will now exit."))
+        print()
+        sys.exit(0)
+
+    print()
+    print(yellow("[*] Deleting all .txt files..."))
+    deleted = delete_all_txt_files()
+    print(green(f"✓ Deleted {deleted} .txt files"))
     print()
 
-    total_subs = len(subs)
+    print(yellow("[*] Starting parallel download process..."))
+    print()
+
+    results = download_parallel()
+
     success_count = 0
     fail_count = 0
-    skip_count = 0
+    failed_subs = []
 
-    print(yellow("[*] Starting update process..."))
-    print()
-
-    for i, (name, url) in enumerate(subs, 1):
-        filename = f"{name}.txt"
-        print(f"[{i}/{total_subs}] Checking {name}...")
-
-        if not ask_overwrite(filename):
-            print(yellow(f"  Skipping {name}"))
-            skip_count += 1
-            print()
-            continue
-
-        print(f"  Downloading {name}...", end=' ', flush=True)
-        success, count = download_sub(name, url)
-
-        if success:
-            if count > 0:
-                print(green(f"✓ {count} configs"))
-                success_count += 1
-            else:
-                print(yellow("⚠ No configs found"))
-                fail_count += 1
+    for name, (success, count) in results.items():
+        if success and count > 0:
+            success_count += 1
         else:
-            print(red("✗ Connection failed"))
             fail_count += 1
+            for sub_name, sub_url in subs:
+                if sub_name == name:
+                    failed_subs.append((name, sub_url))
+                    break
 
-        print()
-        time.sleep(1)
-
-    retry_success, retry_fail = retry_failed()
+    retry_success, retry_fail = retry_failed_parallel(failed_subs)
     success_count += retry_success
-    fail_count += retry_fail
+    fail_count = len(failed_subs) - retry_success
 
     print()
     print(green("═" * 40))
     if success_count > 0:
-        print(green(f"✓ Updated: {success_count} files"))
-    if skip_count > 0:
-        print(yellow(f"⚠ Skipped: {skip_count} files"))
+        print(green(f"✓ Downloaded: {success_count} files"))
     if fail_count > 0:
         print(red(f"✗ Failed: {fail_count} files"))
     print(green("═" * 40))
